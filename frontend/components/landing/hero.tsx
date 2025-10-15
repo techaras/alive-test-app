@@ -1,12 +1,18 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { Button } from '@/components/ui/button'
+import { HealthCheck } from '@/components/health-check'
 
 export function Hero() {
     return (
         <section className="bg-muted/50 dark:bg-background overflow-hidden">
             <div className="relative mx-auto max-w-5xl px-6 pt-28 lg:pt-24">
                 <div className="relative z-10 mx-auto max-w-2xl text-center">
+                    <div className="mb-6 flex justify-center">
+                        <div className="rounded-full border px-8 py-2">
+                            <HealthCheck />
+                        </div>
+                    </div>
                     <h1 className="text-balance text-4xl font-semibold md:text-5xl lg:text-6xl">
                         Modern Software testing reimagined
                     </h1>
