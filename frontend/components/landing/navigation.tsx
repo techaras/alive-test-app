@@ -72,16 +72,16 @@ export function Navigation() {
                                     asChild
                                     variant="outline"
                                     size="sm">
-                                    <Link href="#">
-                                        <span>Login</span>
-                                    </Link>
+                                    <a href="http://localhost:8000/signin">
+                                        <span>Sign in</span>
+                                    </a>
                                 </Button>
                                 <Button
                                     asChild
                                     size="sm">
-                                    <Link href="#">
-                                        <span>Signup</span>
-                                    </Link>
+                                    <a href="http://localhost:8000/signup">
+                                        <span>Sign up</span>
+                                    </a>
                                 </Button>
                             </div>
                         </div>
