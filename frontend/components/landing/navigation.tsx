@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Menu, X, Moon, Sun } from 'lucide-react'
 
@@ -15,6 +15,24 @@ const menuItems = [
 export function Navigation() {
     const [menuState, setMenuState] = useState(false)
     const [isDark, setIsDark] = useState(true)
+    const [isAuthenticated, setIsAuthenticated] = useState(false)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        // Check authentication status
+        fetch('http://localhost:8000/api/me', {
+            credentials: 'include',
+        })
+            .then(res => res.json())
+            .then(data => {
+                setIsAuthenticated(data.authenticated)
+                setLoading(false)
+            })
+            .catch(() => {
+                setIsAuthenticated(false)
+                setLoading(false)
+            })
+    }, [])
 
     const toggleTheme = () => {
         setIsDark(!isDark)
@@ -68,21 +86,37 @@ export function Navigation() {
                                     aria-label="Toggle theme">
                                     {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
                                 </Button>
-                                <Button
-                                    asChild
-                                    variant="outline"
-                                    size="sm">
-                                    <a href="http://localhost:8000/signin">
-                                        <span>Sign in</span>
-                                    </a>
-                                </Button>
-                                <Button
-                                    asChild
-                                    size="sm">
-                                    <a href="http://localhost:8000/signup">
-                                        <span>Sign up</span>
-                                    </a>
-                                </Button>
+                                {!loading && (
+                                    <>
+                                        {isAuthenticated ? (
+                                            <Button
+                                                asChild
+                                                size="sm">
+                                                <Link href="/dashboard">
+                                                    <span>Dashboard</span>
+                                                </Link>
+                                            </Button>
+                                        ) : (
+                                            <>
+                                                <Button
+                                                    asChild
+                                                    variant="outline"
+                                                    size="sm">
+                                                    <a href="http://localhost:8000/signin">
+                                                        <span>Sign in</span>
+                                                    </a>
+                                                </Button>
+                                                <Button
+                                                    asChild
+                                                    size="sm">
+                                                    <a href="http://localhost:8000/signup">
+                                                        <span>Sign up</span>
+                                                    </a>
+                                                </Button>
+                                            </>
+                                        )}
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

@@ -104,8 +104,8 @@ def callback(code: str):
         
         # Use the information in auth_response for further business logic.
         
-        # Redirect to frontend homepage
-        response = RedirectResponse(url="http://localhost:3000")
+        # Redirect to frontend dashboard
+        response = RedirectResponse(url="http://localhost:3000/dashboard")
         
         # Store the session in a cookie
         response.set_cookie(
@@ -164,3 +164,28 @@ def logout(request: Request):
     response.delete_cookie("wos_session")
 
     return response
+
+@app.get("/api/me")
+def get_current_user(request: Request):
+    try:
+        session = workos.user_management.load_sealed_session(
+            sealed_session=request.cookies.get("wos_session"),
+            cookie_password=cookie_password,
+        )
+        auth_response = session.authenticate()
+        
+        if auth_response.authenticated:
+            user = auth_response.user
+            return {
+                "authenticated": True,
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                }
+            }
+        else:
+            return {"authenticated": False}
+    except Exception as e:
+        return {"authenticated": False}
