@@ -1,11 +1,45 @@
-import { Zap } from 'lucide-react'
+'use client'
+
+import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { Zap, LayoutDashboard, BarChart3, Settings, Users } from 'lucide-react'
 import {
   Sidebar,
   SidebarContent,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  SidebarGroup,
+  SidebarGroupContent,
 } from '@/components/ui/sidebar'
 
+const navItems = [
+  {
+    title: 'Dashboard',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+  },
+  {
+    title: 'Analytics',
+    href: '/dashboard/analytics',
+    icon: BarChart3,
+  },
+  {
+    title: 'Users',
+    href: '/dashboard/users',
+    icon: Users,
+  },
+  {
+    title: 'Settings',
+    href: '/dashboard/settings',
+    icon: Settings,
+  },
+]
+
 export function AppSidebar() {
+  const pathname = usePathname()
+
   return (
     <Sidebar variant="inset">
       <SidebarHeader>
@@ -17,7 +51,25 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
       <SidebarContent>
-        {/* Sidebar content will go here */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems.map((item) => {
+                const Icon = item.icon
+                return (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton asChild isActive={pathname === item.href}>
+                      <Link href={item.href}>
+                        <Icon />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
     </Sidebar>
   )

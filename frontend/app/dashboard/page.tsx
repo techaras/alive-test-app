@@ -1,55 +1,8 @@
-'use client'
-
-import { useEffect, useState } from 'react'
-import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar'
-import { AppSidebar } from '@/components/app-sidebar'
-import { UserNav } from '@/components/user-nav'
-import { Skeleton } from '@/components/ui/skeleton'
-
-interface User {
-    id: string
-    email: string
-    first_name: string
-    last_name: string
-}
-
-export default function Dashboard() {
-    const [user, setUser] = useState<User | null>(null)
-    const [loading, setLoading] = useState(true)
-
-    useEffect(() => {
-        fetch('http://localhost:8000/api/me', {
-            credentials: 'include',
-        })
-            .then(res => res.json())
-            .then(data => {
-                if (data.authenticated) {
-                    setUser(data.user)
-                } else {
-                    window.location.href = 'http://localhost:8000/signin'
-                }
-                setLoading(false)
-            })
-            .catch(() => {
-                window.location.href = 'http://localhost:8000/signin'
-            })
-    }, [])
-
+export default function DashboardPage() {
     return (
-        <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-                <div className="border-b bg-background rounded-t-xl">
-                    <div className="flex items-center justify-between px-6 py-4">
-                        <SidebarTrigger />
-                        {loading ? (
-                            <Skeleton className="size-9 rounded-full" />
-                        ) : (
-                            user && <UserNav user={user} />
-                        )}
-                    </div>
-                </div>
-            </SidebarInset>
-        </SidebarProvider>
+      <div className="p-6">
+        <h1 className="text-2xl font-semibold">Dashboard</h1>
+        <p className="text-muted-foreground mt-2">Welcome to your dashboard.</p>
+      </div>
     )
-}
+  }
