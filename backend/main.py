@@ -3,7 +3,9 @@ import os
 from fastapi import FastAPI, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from sse_starlette.sse import EventSourceResponse
 from workos import WorkOSClient
+import asyncio
 
 load_dotenv()
 
@@ -67,9 +69,20 @@ def with_auth(request: Request):
         return response
 
 
-@app.get("/health")
-def liveness_check():
-    return {"status": "alive", "service": "FastAPI"}
+@app.get("/health/stream")
+async def health_stream():
+    async def event_generator():
+        # Send initial status immediately
+        yield {
+            "event": "health",
+            "data": '{"status": "alive", "service": "FastAPI"}'
+        }
+        # Then keep connection alive without sending anything
+        # The open connection itself proves the backend is alive
+        while True:
+            await asyncio.sleep(60)  # Idle loop every 60 secs to keep connection alive
+   
+    return EventSourceResponse(event_generator())
 
 
 @app.get("/signin")

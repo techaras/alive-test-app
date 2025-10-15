@@ -2,23 +2,41 @@
 
 import { useEffect, useState } from 'react'
 
+interface HealthStatus {
+    status: string
+    service: string
+}
+
 export function HealthCheck() {
-    const [status, setStatus] = useState<'alive' | 'error' | 'loading'>('loading')
+    const [healthStatus, setHealthStatus] = useState<HealthStatus | null>(null)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        fetch('http://localhost:8000/health')
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === 'alive') {
-                    setStatus('alive')
-                } else {
-                    setStatus('error')
-                }
-            })
-            .catch(() => {
-                setStatus('error')
-            })
+        // Create SSE connection
+        const eventSource = new EventSource('http://localhost:8000/health/stream')
+
+        eventSource.onopen = () => {
+            setError(null) // Clear error when connected
+        }
+
+        eventSource.addEventListener('health', (event) => {
+            const data = JSON.parse(event.data)
+            setHealthStatus(data)
+            setError(null) // Clear error when receiving data
+        })
+
+        eventSource.onerror = () => {
+            setError('Connection failed')
+            setHealthStatus(null) // Clear status when connection fails
+        }
+
+        // Cleanup on unmount
+        return () => {
+            eventSource.close()
+        }
     }, [])
+
+    const status = error ? 'error' : healthStatus?.status === 'alive' ? 'alive' : 'loading'
 
     return (
         <div className="flex items-center gap-2">
