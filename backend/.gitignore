@@ -2,3 +2,12 @@ venv/
 __pycache__/
 *.pyc
 .env
+
+# Database files
+database/
+*.db
+*.duckdb
+
+# Uploaded files
+data/
+uploads/
