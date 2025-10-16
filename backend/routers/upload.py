@@ -1,44 +1,23 @@
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
 import pandas as pd
 import json
 import uuid
-import asyncio
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncGenerator
 from config import workos, WORKOS_COOKIE_PASSWORD
 from database import get_db_connection, get_user_upload_directory
 
 router = APIRouter(prefix="/api", tags=["upload"])
 
-# In-memory queue for broadcasting upload events
-upload_queues: dict[str, list[asyncio.Queue]] = {}
 
-
-def broadcast_upload_event(user_id: str, event_data: dict):
+@router.get("/uploads")
+async def get_uploads(request: Request):
     """
-    Broadcast an upload event to all connected clients for a specific user.
+    Get all uploads for the authenticated user.
     
-    Args:
-        user_id: The user ID to broadcast to
-        event_data: The event data to send
-    """
-    if user_id in upload_queues:
-        # Send event to all queues for this user
-        for queue in upload_queues[user_id]:
-            try:
-                queue.put_nowait(event_data)
-            except asyncio.QueueFull:
-                pass  # Skip if queue is full
-
-
-@router.get("/uploads/stream")
-async def uploads_stream(request: Request):
-    """
-    Server-Sent Events endpoint for real-time upload notifications.
-    Sends initial upload list on connection, then streams new uploads.
+    Returns:
+        JSON response with list of uploads
     """
     # Check authentication with session refresh support
     try:
@@ -71,81 +50,40 @@ async def uploads_stream(request: Request):
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     
-    async def event_generator() -> AsyncGenerator[dict, None]:
-        # Create a queue for this connection
-        queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+    # Fetch uploads from database
+    conn = get_db_connection()
+    try:
+        result = conn.execute("""
+            SELECT 
+                upload_id,
+                filename,
+                uploaded_at,
+                row_count,
+                column_count,
+                schema_json
+            FROM uploads
+            WHERE user_id = ?
+            ORDER BY uploaded_at DESC
+        """, [user_id]).fetchall()
         
-        # Register this queue for the user
-        if user_id not in upload_queues:
-            upload_queues[user_id] = []
-        upload_queues[user_id].append(queue)
+        uploads = []
+        for row in result:
+            schema = json.loads(row[5])
+            uploads.append({
+                "upload_id": row[0],
+                "filename": row[1],
+                "uploaded_at": row[2].isoformat() if row[2] else None,
+                "row_count": row[3],
+                "column_count": row[4],
+                "columns": schema.get('columns', [])
+            })
         
-        try:
-            # Send initial connection event
-            yield {
-                "event": "connected",
-                "data": json.dumps({"status": "connected", "user_id": user_id})
-            }
-            
-            # Send initial data immediately via SSE
-            conn = get_db_connection()
-            try:
-                result = conn.execute("""
-                    SELECT 
-                        upload_id,
-                        filename,
-                        uploaded_at,
-                        row_count,
-                        column_count,
-                        schema_json
-                    FROM uploads
-                    WHERE user_id = ?
-                    ORDER BY uploaded_at DESC
-                """, [user_id]).fetchall()
-                
-                uploads = []
-                for row in result:
-                    schema = json.loads(row[5])
-                    uploads.append({
-                        "upload_id": row[0],
-                        "filename": row[1],
-                        "uploaded_at": row[2].isoformat() if row[2] else None,
-                        "row_count": row[3],
-                        "column_count": row[4],
-                        "columns": schema.get('columns', [])
-                    })
-                
-                yield {
-                    "event": "initial",
-                    "data": json.dumps({"uploads": uploads})
-                }
-            finally:
-                conn.close()
-            
-            # Listen for new upload events
-            while True:
-                # Wait for new events with timeout to keep connection alive
-                try:
-                    event_data = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    yield {
-                        "event": "upload",
-                        "data": json.dumps(event_data)
-                    }
-                except asyncio.TimeoutError:
-                    # Send keepalive ping every 30 seconds
-                    yield {
-                        "event": "ping",
-                        "data": json.dumps({"status": "alive"})
-                    }
-                    
-        finally:
-            # Clean up: remove this queue when client disconnects
-            if user_id in upload_queues:
-                upload_queues[user_id].remove(queue)
-                if not upload_queues[user_id]:
-                    del upload_queues[user_id]
-    
-    return EventSourceResponse(event_generator())
+        return JSONResponse(
+            status_code=200,
+            content={"uploads": uploads}
+        )
+    finally:
+        conn.close()
 
 
 @router.post("/upload")
@@ -155,7 +93,6 @@ async def upload_csv(
 ):
     """
     Upload a CSV file, convert to Parquet, and store metadata.
-    Broadcasts event to connected SSE clients.
     
     Args:
         request: FastAPI request object (for session)
@@ -292,10 +229,7 @@ async def upload_csv(
             "uploaded_at": uploaded_at.isoformat()
         }
         
-        # 9. Broadcast event to SSE clients
-        broadcast_upload_event(user_id, upload_data)
-        
-        # 10. Return success response
+        # 9. Return success response
         return JSONResponse(
             status_code=201,
             content={

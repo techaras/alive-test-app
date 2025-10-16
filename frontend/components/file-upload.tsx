@@ -6,15 +6,17 @@ import { useFileUpload } from '@/hooks/use-file-upload'
 import { useUploads } from '@/hooks/use-uploads'
 
 export function FileUpload() {
+  const { uploads, isLoading, error: fetchError, refetch } = useUploads()
+
   const {
     selectedFile,
     isUploading,
     uploadProgress,
     error: uploadError,
     handleFileChange,
-  } = useFileUpload()
-
-  const { uploads, isLoading, error: fetchError } = useUploads()
+  } = useFileUpload({
+    onSuccess: refetch
+  })
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)

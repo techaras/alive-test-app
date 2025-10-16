@@ -1,6 +1,10 @@
 import { useState } from 'react'
 
-export function useFileUpload() {
+interface UseFileUploadProps {
+  onSuccess?: () => void
+}
+
+export function useFileUpload({ onSuccess }: UseFileUploadProps = {}) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -37,6 +41,11 @@ export function useFileUpload() {
                 setSelectedFile(null)
                 setUploadProgress(0)
                 setIsUploading(false)
+                
+                // Call success callback to trigger refetch
+                if (onSuccess) {
+                  onSuccess()
+                }
               }, 1000)
               
               resolve()

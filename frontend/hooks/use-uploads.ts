@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 
 export interface Upload {
   upload_id: string
@@ -13,110 +13,43 @@ export function useUploads() {
   const [uploads, setUploads] = useState<Upload[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const eventSourceRef = useRef<EventSource | null>(null)
-  const isConnecting = useRef(false)
 
-  useEffect(() => {
-    // Prevent double connection in React Strict Mode
-    if (isConnecting.current) return
-    isConnecting.current = true
+  const fetchUploads = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
 
-    const connectSSE = () => {
-      // Close existing connection if any
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
-
-      const eventSource = new EventSource(
-        'http://localhost:8000/api/uploads/stream',
-        { withCredentials: true }
-      )
-      eventSourceRef.current = eventSource
-
-      eventSource.addEventListener('connected', () => {
-        setError(null)
-        setIsLoading(true)
+    try {
+      const response = await fetch('http://localhost:8000/api/uploads', {
+        credentials: 'include',
       })
 
-      // Initial data load via SSE
-      eventSource.addEventListener('initial', (event) => {
-        const data = JSON.parse(event.data)
-        setUploads(data.uploads)
-        setIsLoading(false)
-      })
-
-      // New upload events
-      eventSource.addEventListener('upload', (event) => {
-        const uploadData: Upload = JSON.parse(event.data)
-        setUploads((prev) => [uploadData, ...prev])
-      })
-
-      eventSource.addEventListener('ping', () => {
-        // Keepalive - connection is healthy
-      })
-
-      eventSource.onerror = () => {
-        const readyState = eventSource.readyState
-        
-        // If connection closed (readyState 2), it might be a 401
-        if (readyState === EventSource.CLOSED) {
-          setError('Session expired')
-          setIsLoading(false)
-          eventSource.close()
-          
-          // Check if we're actually logged out
-          fetch('http://localhost:8000/api/me', {
-            credentials: 'include',
-          })
-            .then(res => res.json())
-            .then(data => {
-              if (!data.authenticated) {
-                // Session expired - redirect to login
-                window.location.href = 'http://localhost:8000/signin'
-              } else {
-                // Session valid but connection failed - retry
-                setTimeout(() => {
-                  isConnecting.current = false
-                  connectSSE()
-                }, 3000)
-              }
-            })
-            .catch(() => {
-              // Network error - retry
-              setTimeout(() => {
-                isConnecting.current = false
-                connectSSE()
-              }, 3000)
-            })
-        } else {
-          // Transient error - retry
-          setError('Connection lost')
-          setIsLoading(false)
-          eventSource.close()
-          
-          setTimeout(() => {
-            isConnecting.current = false
-            connectSSE()
-          }, 3000)
+      if (!response.ok) {
+        if (response.status === 401) {
+          // Session expired - redirect to login
+          window.location.href = 'http://localhost:8000/signin'
+          return
         }
+        throw new Error('Failed to fetch uploads')
       }
-    }
 
-    connectSSE()
-
-    // Cleanup
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-        eventSourceRef.current = null
-      }
-      isConnecting.current = false
+      const data = await response.json()
+      setUploads(data.uploads)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch uploads'
+      setError(errorMessage)
+    } finally {
+      setIsLoading(false)
     }
   }, [])
+
+  useEffect(() => {
+    fetchUploads()
+  }, [fetchUploads])
 
   return {
     uploads,
     isLoading,
     error,
+    refetch: fetchUploads,
   }
 }
