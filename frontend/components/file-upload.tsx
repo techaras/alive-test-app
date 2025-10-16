@@ -1,21 +1,20 @@
 'use client'
 
-import { Upload, X, FileIcon, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Upload, FileIcon, Loader2 } from 'lucide-react'
 import AnimatedProgressBar from '@/components/smoothui/ui/AnimatedProgressBar'
 import { useFileUpload } from '@/hooks/use-file-upload'
+import { useUploads } from '@/hooks/use-uploads'
 
 export function FileUpload() {
   const {
     selectedFile,
     isUploading,
     uploadProgress,
-    uploadSuccess,
-    uploadedAt,
-    error,
+    error: uploadError,
     handleFileChange,
-    handleRemove,
   } = useFileUpload()
+
+  const { uploads, isLoading, error: fetchError } = useUploads()
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -29,7 +28,8 @@ export function FileUpload() {
   }
 
   return (
-    <div className="w-full max-w-md space-y-4">
+    <div className="w-full max-w-md space-y-6">
+      {/* Upload Dropzone */}
       <label 
         htmlFor="file-upload" 
         className="block rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-6 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
@@ -59,7 +59,8 @@ export function FileUpload() {
         />
       </label>
 
-      {selectedFile && (
+      {/* Current Upload Progress */}
+      {selectedFile && isUploading && (
         <div className="space-y-3">
           <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3">
             <FileIcon className="h-8 w-8 text-muted-foreground flex-shrink-0" />
@@ -69,46 +70,70 @@ export function FileUpload() {
               <p className="text-xs text-muted-foreground">
                 {(selectedFile.size / 1024).toFixed(2)} KB
               </p>
-              
-              {uploadedAt && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Uploaded: {formatTimestamp(uploadedAt)}
-                </p>
-              )}
-              
-              {error && (
-                <p className="text-xs text-destructive mt-1">
-                  {error}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              {uploadSuccess && (
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
-              )}
-              
-              {!isUploading && (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={handleRemove}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
             </div>
           </div>
 
-          {isUploading && (
-            <AnimatedProgressBar
-              value={uploadProgress}
-              label="Uploading..."
-              color="#6366f1"
-            />
-          )}
+          <AnimatedProgressBar
+            value={uploadProgress}
+            label="Uploading..."
+            color="#6366f1"
+          />
         </div>
       )}
+
+      {/* Upload Error */}
+      {uploadError && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+          <p className="text-sm text-destructive">{uploadError}</p>
+        </div>
+      )}
+
+      {/* Uploads List */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium">Your Uploads</h3>
+          {isLoading && (
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
+
+        {fetchError && (
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+            <p className="text-sm text-destructive">{fetchError}</p>
+          </div>
+        )}
+
+        {!isLoading && uploads.length === 0 && (
+          <div className="rounded-lg border border-dashed p-6 text-center">
+            <p className="text-sm text-muted-foreground">
+              No uploads yet. Upload your first CSV file!
+            </p>
+          </div>
+        )}
+
+        {uploads.length > 0 && (
+          <div className="max-h-96 overflow-y-auto space-y-2">
+            {uploads.map((upload) => (
+              <div
+                key={upload.upload_id}
+                className="flex items-start gap-3 rounded-lg border bg-card p-3 transition-colors hover:bg-muted/50"
+              >
+                <FileIcon className="h-8 w-8 text-muted-foreground flex-shrink-0" />
+                
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{upload.filename}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {upload.row_count.toLocaleString()} rows × {upload.column_count} columns
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {formatTimestamp(upload.uploaded_at)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }

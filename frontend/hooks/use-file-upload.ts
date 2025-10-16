@@ -4,16 +4,12 @@ export function useFileUpload() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [uploadSuccess, setUploadSuccess] = useState(false)
-  const [uploadedAt, setUploadedAt] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const uploadFile = async (file: File) => {
     setIsUploading(true)
     setUploadProgress(0)
     setError(null)
-    setUploadSuccess(false)
-    setUploadedAt(null)
 
     return new Promise<void>((resolve, reject) => {
       const formData = new FormData()
@@ -35,8 +31,14 @@ export function useFileUpload() {
             
             if (result.success) {
               setUploadProgress(100)
-              setUploadSuccess(true)
-              setUploadedAt(result.data.uploaded_at)
+              
+              // Reset after a short delay to show completion
+              setTimeout(() => {
+                setSelectedFile(null)
+                setUploadProgress(0)
+                setIsUploading(false)
+              }, 1000)
+              
               resolve()
             } else {
               throw new Error('Upload failed')
@@ -44,7 +46,7 @@ export function useFileUpload() {
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Upload failed'
             setError(errorMessage)
-            setUploadSuccess(false)
+            setIsUploading(false)
             reject(err)
           }
         } else {
@@ -54,16 +56,14 @@ export function useFileUpload() {
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Upload failed'
             setError(errorMessage)
-            setUploadSuccess(false)
+            setIsUploading(false)
             reject(err)
           }
         }
-        setIsUploading(false)
       }
 
       xhr.onerror = () => {
         setError('Network error occurred')
-        setUploadSuccess(false)
         setIsUploading(false)
         reject(new Error('Network error'))
       }
@@ -88,22 +88,11 @@ export function useFileUpload() {
     }
   }
 
-  const handleRemove = () => {
-    setSelectedFile(null)
-    setUploadSuccess(false)
-    setUploadedAt(null)
-    setUploadProgress(0)
-    setError(null)
-  }
-
   return {
     selectedFile,
     isUploading,
     uploadProgress,
-    uploadSuccess,
-    uploadedAt,
     error,
     handleFileChange,
-    handleRemove,
   }
 }
