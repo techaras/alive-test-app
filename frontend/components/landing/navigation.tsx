@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Menu, X, Moon, Sun } from 'lucide-react'
+import { Menu, X, Moon, Sun, Zap } from 'lucide-react'
 
 const menuItems = [
     { name: 'Features', href: '#' },
@@ -50,8 +50,11 @@ export function Navigation() {
                             <Link
                                 href="/"
                                 aria-label="home"
-                                className="flex items-center space-x-2">
-                                {/* <Logo /> */}
+                                className="flex items-center gap-2">
+                                <div className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                                    <Zap className="size-4" />
+                                </div>
+                                <span className="text-lg font-semibold">Company Inc.</span>
                             </Link>
 
                             <button

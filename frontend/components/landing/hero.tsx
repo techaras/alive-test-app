@@ -14,10 +14,10 @@ export function Hero() {
                         </div>
                     </div>
                     <h1 className="text-balance text-4xl font-semibold md:text-5xl lg:text-6xl">
-                        Modern Software testing reimagined
+                        Viasualise any CSV with AI
                     </h1>
                     <p className="text-muted-foreground mx-auto my-8 max-w-2xl text-xl">
-                        Officiis laudantium excepturi ducimus rerum dignissimos, and tempora nam vitae, excepturi ducimus iste provident dolores.
+                        Upload any CSV file and let AI create interactive, beautiful data presentations tailored to your data. No configuration needed.
                     </p>
 
                     <Button
