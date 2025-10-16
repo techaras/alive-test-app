@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 
 export interface Upload {
   upload_id: string
@@ -13,61 +13,104 @@ export function useUploads() {
   const [uploads, setUploads] = useState<Upload[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const eventSourceRef = useRef<EventSource | null>(null)
+  const isConnecting = useRef(false)
 
   useEffect(() => {
-    // Fetch initial uploads
-    const fetchInitialUploads = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/uploads', {
-          credentials: 'include',
-        })
+    // Prevent double connection in React Strict Mode
+    if (isConnecting.current) return
+    isConnecting.current = true
 
-        if (!response.ok) {
-          throw new Error('Failed to fetch uploads')
-        }
+    const connectSSE = () => {
+      // Close existing connection if any
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+      }
 
-        const data = await response.json()
+      const eventSource = new EventSource(
+        'http://localhost:8000/api/uploads/stream',
+        { withCredentials: true }
+      )
+      eventSourceRef.current = eventSource
+
+      eventSource.addEventListener('connected', () => {
+        setError(null)
+        setIsLoading(true)
+      })
+
+      // Initial data load via SSE
+      eventSource.addEventListener('initial', (event) => {
+        const data = JSON.parse(event.data)
+        setUploads(data.uploads)
+        setIsLoading(false)
+      })
+
+      // New upload events
+      eventSource.addEventListener('upload', (event) => {
+        const uploadData: Upload = JSON.parse(event.data)
+        setUploads((prev) => [uploadData, ...prev])
+      })
+
+      eventSource.addEventListener('ping', () => {
+        // Keepalive - connection is healthy
+      })
+
+      eventSource.onerror = () => {
+        const readyState = eventSource.readyState
         
-        if (data.success) {
-          setUploads(data.uploads)
+        // If connection closed (readyState 2), it might be a 401
+        if (readyState === EventSource.CLOSED) {
+          setError('Session expired')
+          setIsLoading(false)
+          eventSource.close()
+          
+          // Check if we're actually logged out
+          fetch('http://localhost:8000/api/me', {
+            credentials: 'include',
+          })
+            .then(res => res.json())
+            .then(data => {
+              if (!data.authenticated) {
+                // Session expired - redirect to login
+                window.location.href = 'http://localhost:8000/signin'
+              } else {
+                // Session valid but connection failed - retry
+                setTimeout(() => {
+                  isConnecting.current = false
+                  connectSSE()
+                }, 3000)
+              }
+            })
+            .catch(() => {
+              // Network error - retry
+              setTimeout(() => {
+                isConnecting.current = false
+                connectSSE()
+              }, 3000)
+            })
+        } else {
+          // Transient error - retry
+          setError('Connection lost')
+          setIsLoading(false)
+          eventSource.close()
+          
+          setTimeout(() => {
+            isConnecting.current = false
+            connectSSE()
+          }, 3000)
         }
-        
-        setIsLoading(false)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch uploads')
-        setIsLoading(false)
       }
     }
 
-    fetchInitialUploads()
+    connectSSE()
 
-    // Connect to SSE for real-time updates
-    const eventSource = new EventSource('http://localhost:8000/api/uploads/stream', {
-      withCredentials: true,
-    })
-
-    eventSource.addEventListener('connected', () => {
-      setError(null)
-    })
-
-    eventSource.addEventListener('upload', (event) => {
-      const uploadData: Upload = JSON.parse(event.data)
-      
-      // Add new upload to the beginning of the list
-      setUploads((prevUploads) => [uploadData, ...prevUploads])
-    })
-
-    eventSource.addEventListener('ping', () => {
-      // Keepalive - do nothing
-    })
-
-    eventSource.onerror = () => {
-      setError('Connection to server lost')
-    }
-
-    // Cleanup on unmount
+    // Cleanup
     return () => {
-      eventSource.close()
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+      isConnecting.current = false
     }
   }, [])
 

@@ -38,9 +38,9 @@ def broadcast_upload_event(user_id: str, event_data: dict):
 async def uploads_stream(request: Request):
     """
     Server-Sent Events endpoint for real-time upload notifications.
-    Sends events when new files are uploaded by the authenticated user.
+    Sends initial upload list on connection, then streams new uploads.
     """
-    # Check authentication
+    # Check authentication with session refresh support
     try:
         session = workos.user_management.load_sealed_session(
             sealed_session=request.cookies.get("wos_session"),
@@ -48,11 +48,26 @@ async def uploads_stream(request: Request):
         )
         auth_response = session.authenticate()
         
+        # If not authenticated, attempt to refresh the session
         if not auth_response.authenticated:
-            raise HTTPException(status_code=401, detail="Not authenticated")
+            if auth_response.reason == "no_session_cookie_provided":
+                raise HTTPException(status_code=401, detail="No session cookie")
+            
+            # Try to refresh the session
+            try:
+                refresh_result = session.refresh()
+                if not refresh_result.authenticated:
+                    raise HTTPException(status_code=401, detail="Session refresh failed")
+                
+                # Session refreshed successfully - use the new session
+                user_id = refresh_result.user.id
+            except Exception as refresh_error:
+                raise HTTPException(status_code=401, detail="Session expired")
+        else:
+            user_id = auth_response.user.id
         
-        user_id = auth_response.user.id
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     
@@ -72,7 +87,42 @@ async def uploads_stream(request: Request):
                 "data": json.dumps({"status": "connected", "user_id": user_id})
             }
             
-            # Listen for events
+            # Send initial data immediately via SSE
+            conn = get_db_connection()
+            try:
+                result = conn.execute("""
+                    SELECT 
+                        upload_id,
+                        filename,
+                        uploaded_at,
+                        row_count,
+                        column_count,
+                        schema_json
+                    FROM uploads
+                    WHERE user_id = ?
+                    ORDER BY uploaded_at DESC
+                """, [user_id]).fetchall()
+                
+                uploads = []
+                for row in result:
+                    schema = json.loads(row[5])
+                    uploads.append({
+                        "upload_id": row[0],
+                        "filename": row[1],
+                        "uploaded_at": row[2].isoformat() if row[2] else None,
+                        "row_count": row[3],
+                        "column_count": row[4],
+                        "columns": schema.get('columns', [])
+                    })
+                
+                yield {
+                    "event": "initial",
+                    "data": json.dumps({"uploads": uploads})
+                }
+            finally:
+                conn.close()
+            
+            # Listen for new upload events
             while True:
                 # Wait for new events with timeout to keep connection alive
                 try:
@@ -98,66 +148,6 @@ async def uploads_stream(request: Request):
     return EventSourceResponse(event_generator())
 
 
-@router.get("/uploads")
-async def get_uploads(request: Request):
-    """
-    Get all uploads for the authenticated user.
-    Returns list of upload metadata.
-    """
-    # Check authentication
-    try:
-        session = workos.user_management.load_sealed_session(
-            sealed_session=request.cookies.get("wos_session"),
-            cookie_password=WORKOS_COOKIE_PASSWORD,
-        )
-        auth_response = session.authenticate()
-        
-        if not auth_response.authenticated:
-            raise HTTPException(status_code=401, detail="Not authenticated")
-        
-        user_id = auth_response.user.id
-        
-    except Exception as e:
-        raise HTTPException(status_code=401, detail="Authentication failed")
-    
-    # Fetch uploads from database
-    conn = get_db_connection()
-    
-    try:
-        result = conn.execute("""
-            SELECT 
-                upload_id,
-                filename,
-                uploaded_at,
-                row_count,
-                column_count,
-                schema_json
-            FROM uploads
-            WHERE user_id = ?
-            ORDER BY uploaded_at DESC
-        """, [user_id]).fetchall()
-        
-        uploads = []
-        for row in result:
-            schema = json.loads(row[5])
-            uploads.append({
-                "upload_id": row[0],
-                "filename": row[1],
-                "uploaded_at": row[2].isoformat() if row[2] else None,
-                "row_count": row[3],
-                "column_count": row[4],
-                "columns": schema.get('columns', [])
-            })
-        
-        return {
-            "success": True,
-            "uploads": uploads
-        }
-        
-    finally:
-        conn.close()
-
-
 @router.post("/upload")
 async def upload_csv(
     request: Request,
@@ -175,7 +165,7 @@ async def upload_csv(
         JSON response with upload details
     """
     
-    # 1. Check authentication
+    # 1. Check authentication with session refresh support
     try:
         session = workos.user_management.load_sealed_session(
             sealed_session=request.cookies.get("wos_session"),
@@ -183,12 +173,28 @@ async def upload_csv(
         )
         auth_response = session.authenticate()
         
+        # If not authenticated, attempt to refresh the session
         if not auth_response.authenticated:
-            raise HTTPException(status_code=401, detail="Not authenticated")
+            if auth_response.reason == "no_session_cookie_provided":
+                raise HTTPException(status_code=401, detail="No session cookie")
+            
+            # Try to refresh the session
+            try:
+                refresh_result = session.refresh()
+                if not refresh_result.authenticated:
+                    raise HTTPException(status_code=401, detail="Session refresh failed")
+                
+                # Session refreshed successfully - use the new user
+                user = refresh_result.user
+                user_id = user.id
+            except Exception as refresh_error:
+                raise HTTPException(status_code=401, detail="Session expired")
+        else:
+            user = auth_response.user
+            user_id = user.id
         
-        user = auth_response.user
-        user_id = user.id
-        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=401, detail="Authentication failed")
     
