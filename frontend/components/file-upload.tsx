@@ -1,77 +1,21 @@
 'use client'
 
-import { useState } from 'react'
-import { Upload, X, FileIcon, Loader2, CheckCircle2 } from 'lucide-react'
+import { Upload, X, FileIcon, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import AnimatedProgressBar from '@/components/smoothui/ui/AnimatedProgressBar'
+import { useFileUpload } from '@/hooks/use-file-upload'
 
 export function FileUpload() {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
-  const [uploadSuccess, setUploadSuccess] = useState(false)
-  const [uploadedAt, setUploadedAt] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-
-  const uploadFile = async (file: File) => {
-    setIsUploading(true)
-    setError(null)
-    setUploadSuccess(false)
-    setUploadedAt(null)
-
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const response = await fetch('http://localhost:8000/api/upload', {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}))
-        throw new Error(errorData.detail || 'Upload failed')
-      }
-
-      const result = await response.json()
-
-      if (result.success) {
-        setUploadSuccess(true)
-        setUploadedAt(result.data.uploaded_at)
-      } else {
-        throw new Error('Upload failed')
-      }
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Upload failed'
-      setError(errorMessage)
-      setUploadSuccess(false)
-    } finally {
-      setIsUploading(false)
-    }
-  }
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      // Validate CSV file type
-      if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
-        setError('Please select a CSV file')
-        return
-      }
-      
-      setSelectedFile(file)
-      setError(null)
-      
-      // Auto-upload immediately
-      uploadFile(file)
-    }
-  }
-
-  const handleRemove = () => {
-    setSelectedFile(null)
-    setUploadSuccess(false)
-    setUploadedAt(null)
-    setError(null)
-  }
+  const {
+    selectedFile,
+    isUploading,
+    uploadProgress,
+    uploadSuccess,
+    uploadedAt,
+    error,
+    handleFileChange,
+    handleRemove,
+  } = useFileUpload()
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -116,47 +60,53 @@ export function FileUpload() {
       </label>
 
       {selectedFile && (
-        <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3">
-          <FileIcon className="h-8 w-8 text-muted-foreground flex-shrink-0" />
-          
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{selectedFile.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {(selectedFile.size / 1024).toFixed(2)} KB
-            </p>
+        <div className="space-y-3">
+          <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3">
+            <FileIcon className="h-8 w-8 text-muted-foreground flex-shrink-0" />
             
-            {uploadedAt && (
-              <p className="text-xs text-muted-foreground mt-1">
-                Uploaded: {formatTimestamp(uploadedAt)}
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+              <p className="text-xs text-muted-foreground">
+                {(selectedFile.size / 1024).toFixed(2)} KB
               </p>
-            )}
-            
-            {error && (
-              <p className="text-xs text-destructive mt-1">
-                {error}
-              </p>
-            )}
+              
+              {uploadedAt && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Uploaded: {formatTimestamp(uploadedAt)}
+                </p>
+              )}
+              
+              {error && (
+                <p className="text-xs text-destructive mt-1">
+                  {error}
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {uploadSuccess && (
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+              )}
+              
+              {!isUploading && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={handleRemove}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {isUploading && (
-              <Loader2 className="h-5 w-5 text-primary animate-spin" />
-            )}
-            
-            {uploadSuccess && (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            )}
-            
-            {!isUploading && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                onClick={handleRemove}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            )}
-          </div>
+          {isUploading && (
+            <AnimatedProgressBar
+              value={uploadProgress}
+              label="Uploading..."
+              color="#6366f1"
+            />
+          )}
         </div>
       )}
     </div>
