@@ -4,6 +4,7 @@ import { Upload, FileIcon, Loader2, CheckCircle2, XCircle, RotateCcw } from 'luc
 import AnimatedProgressBar from '@/components/smoothui/ui/AnimatedProgressBar'
 import { useFileUpload } from '@/hooks/use-file-upload'
 import { useUploads } from '@/hooks/use-uploads'
+import { useState } from 'react'
 
 export function FileUpload() {
   const { uploads, isLoading, error: fetchError, refetch } = useUploads()
@@ -21,6 +22,60 @@ export function FileUpload() {
   } = useFileUpload({
     onSuccess: refetch
   })
+
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDragEnter = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent<HTMLLabelElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    if (isUploading) return
+
+    const files = Array.from(e.dataTransfer.files)
+    
+    if (files.length === 0) return
+
+    // Validate all files are CSV (same logic as handleFileChange)
+    const invalidFiles = files.filter(
+      file => !file.name.endsWith('.csv') && file.type !== 'text/csv'
+    )
+
+    if (invalidFiles.length > 0) {
+      // This will be handled by the hook's internal error state
+      // We need to trigger the same flow, so we'll create a synthetic event
+      const input = document.getElementById('file-upload') as HTMLInputElement
+      const dataTransfer = new DataTransfer()
+      files.forEach(file => dataTransfer.items.add(file))
+      input.files = dataTransfer.files
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      return
+    }
+
+    // Create synthetic change event with the dropped files
+    const input = document.getElementById('file-upload') as HTMLInputElement
+    const dataTransfer = new DataTransfer()
+    files.forEach(file => dataTransfer.items.add(file))
+    input.files = dataTransfer.files
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+  }
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -42,7 +97,15 @@ export function FileUpload() {
       {/* Upload Dropzone */}
       <label 
         htmlFor="file-upload" 
-        className="block rounded-lg border border-dashed border-gray-300 dark:border-gray-700 p-6 cursor-pointer hover:border-primary/50 hover:bg-muted/50 transition-colors"
+        className={`block rounded-lg border border-dashed p-6 cursor-pointer transition-colors ${
+          isDragging
+            ? 'border-primary bg-primary/10'
+            : 'border-gray-300 dark:border-gray-700 hover:border-primary/50 hover:bg-muted/50'
+        }`}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       >
         <div className="flex flex-col items-center gap-4">
           <div className="rounded-full bg-gray-100 dark:bg-gray-800 p-3">
