@@ -1,6 +1,6 @@
 'use client'
 
-import { Upload, FileIcon, Loader2 } from 'lucide-react'
+import { Upload, FileIcon, Loader2, CheckCircle2, XCircle, RotateCcw } from 'lucide-react'
 import AnimatedProgressBar from '@/components/smoothui/ui/AnimatedProgressBar'
 import { useFileUpload } from '@/hooks/use-file-upload'
 import { useUploads } from '@/hooks/use-uploads'
@@ -9,11 +9,15 @@ export function FileUpload() {
   const { uploads, isLoading, error: fetchError, refetch } = useUploads()
 
   const {
-    selectedFile,
-    isUploading,
+    currentUpload,
     uploadProgress,
+    uploadQueue,
+    completedUploads,
+    failedUploads,
+    isUploading,
     error: uploadError,
     handleFileChange,
+    retryFailed,
   } = useFileUpload({
     onSuccess: refetch
   })
@@ -27,6 +31,10 @@ export function FileUpload() {
       hour: '2-digit',
       minute: '2-digit',
     })
+  }
+
+  const formatFileSize = (bytes: number) => {
+    return (bytes / 1024).toFixed(2) + ' KB'
   }
 
   return (
@@ -43,10 +51,10 @@ export function FileUpload() {
 
           <div className="text-center">
             <span className="text-sm font-medium text-primary">
-              Choose a file
+              Choose files
             </span>
             <p className="text-xs text-muted-foreground mt-1">
-              CSV files only
+              CSV files only • Select multiple files
             </p>
           </div>
         </div>
@@ -55,22 +63,30 @@ export function FileUpload() {
           id="file-upload"
           type="file"
           accept=".csv,text/csv"
+          multiple
           className="sr-only"
           onChange={handleFileChange}
           disabled={isUploading}
         />
       </label>
 
+      {/* Upload Error */}
+      {uploadError && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
+          <p className="text-sm text-destructive">{uploadError}</p>
+        </div>
+      )}
+
       {/* Current Upload Progress */}
-      {selectedFile && isUploading && (
+      {currentUpload && (
         <div className="space-y-3">
           <div className="flex items-start gap-3 rounded-lg border bg-muted/50 p-3">
             <FileIcon className="h-8 w-8 text-muted-foreground flex-shrink-0" />
             
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{selectedFile.name}</p>
+              <p className="text-sm font-medium truncate">{currentUpload.name}</p>
               <p className="text-xs text-muted-foreground">
-                {(selectedFile.size / 1024).toFixed(2)} KB
+                {formatFileSize(currentUpload.size)}
               </p>
             </div>
           </div>
@@ -83,10 +99,71 @@ export function FileUpload() {
         </div>
       )}
 
-      {/* Upload Error */}
-      {uploadError && (
-        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3">
-          <p className="text-sm text-destructive">{uploadError}</p>
+      {/* Queue Status */}
+      {isUploading && (uploadQueue.length > 0 || completedUploads.length > 0 || failedUploads.length > 0) && (
+        <div className="space-y-3 rounded-lg border bg-card p-4">
+          {/* Pending files */}
+          {uploadQueue.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Pending ({uploadQueue.length})
+              </p>
+              <div className="space-y-2">
+                {uploadQueue.map((file, index) => (
+                  <div key={index} className="flex items-center gap-2 text-sm">
+                    <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+                    <span className="truncate text-muted-foreground">{file.name}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Completed files */}
+          {completedUploads.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Completed ({completedUploads.length})
+              </p>
+              <div className="space-y-2">
+                {completedUploads.map((filename, index) => (
+                  <div key={index} className="flex items-center gap-2 text-sm">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                    <span className="truncate">{filename}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Failed files */}
+          {failedUploads.length > 0 && (
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-medium text-destructive">
+                  Failed ({failedUploads.length})
+                </p>
+                <button
+                  onClick={retryFailed}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Retry all
+                </button>
+              </div>
+              <div className="space-y-2">
+                {failedUploads.map((failed, index) => (
+                  <div key={index} className="space-y-1">
+                    <div className="flex items-center gap-2 text-sm">
+                      <XCircle className="h-4 w-4 text-destructive" />
+                      <span className="truncate">{failed.file.name}</span>
+                    </div>
+                    <p className="text-xs text-destructive/80 ml-6">{failed.error}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

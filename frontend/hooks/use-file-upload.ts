@@ -4,14 +4,26 @@ interface UseFileUploadProps {
   onSuccess?: () => void
 }
 
+interface FailedUpload {
+  file: File
+  error: string
+}
+
 export function useFileUpload({ onSuccess }: UseFileUploadProps = {}) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [isUploading, setIsUploading] = useState(false)
+  // Current upload state (for progress tracking)
+  const [currentUpload, setCurrentUpload] = useState<File | null>(null)
   const [uploadProgress, setUploadProgress] = useState(0)
+  
+  // Queue management
+  const [uploadQueue, setUploadQueue] = useState<File[]>([])
+  const [completedUploads, setCompletedUploads] = useState<string[]>([])
+  const [failedUploads, setFailedUploads] = useState<FailedUpload[]>([])
+  
+  // Global state
+  const [isUploading, setIsUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const uploadFile = async (file: File) => {
-    setIsUploading(true)
+  const uploadFile = async (file: File): Promise<void> => {
     setUploadProgress(0)
     setError(null)
 
@@ -35,46 +47,27 @@ export function useFileUpload({ onSuccess }: UseFileUploadProps = {}) {
             
             if (result.success) {
               setUploadProgress(100)
-              
-              // Reset after a short delay to show completion
-              setTimeout(() => {
-                setSelectedFile(null)
-                setUploadProgress(0)
-                setIsUploading(false)
-                
-                // Call success callback to trigger refetch
-                if (onSuccess) {
-                  onSuccess()
-                }
-              }, 1000)
-              
               resolve()
             } else {
               throw new Error('Upload failed')
             }
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Upload failed'
-            setError(errorMessage)
-            setIsUploading(false)
-            reject(err)
+            reject(new Error(errorMessage))
           }
         } else {
           try {
             const errorData = JSON.parse(xhr.responseText)
-            throw new Error(errorData.detail || 'Upload failed')
+            reject(new Error(errorData.detail || 'Upload failed'))
           } catch (err) {
             const errorMessage = err instanceof Error ? err.message : 'Upload failed'
-            setError(errorMessage)
-            setIsUploading(false)
-            reject(err)
+            reject(new Error(errorMessage))
           }
         }
       }
 
       xhr.onerror = () => {
-        setError('Network error occurred')
-        setIsUploading(false)
-        reject(new Error('Network error'))
+        reject(new Error('Network error occurred'))
       }
 
       xhr.open('POST', 'http://localhost:8000/api/upload')
@@ -83,25 +76,78 @@ export function useFileUpload({ onSuccess }: UseFileUploadProps = {}) {
     })
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      if (!file.name.endsWith('.csv') && file.type !== 'text/csv') {
-        setError('Please select a CSV file')
-        return
-      }
+  const processQueue = async (filesToUpload: File[]) => {
+    setIsUploading(true)
+    setCompletedUploads([])
+    setFailedUploads([])
+    setUploadQueue(filesToUpload)
+
+    for (const file of filesToUpload) {
+      setCurrentUpload(file)
       
-      setSelectedFile(file)
-      setError(null)
-      uploadFile(file)
+      // Remove from queue as we start uploading
+      setUploadQueue(prev => prev.filter(f => f !== file))
+
+      try {
+        await uploadFile(file)
+        
+        // Mark as completed
+        setCompletedUploads(prev => [...prev, file.name])
+        
+        // Refetch after each successful upload
+        if (onSuccess) {
+          onSuccess()
+        }
+        
+        // Small delay to show completion
+        await new Promise(resolve => setTimeout(resolve, 500))
+        
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Upload failed'
+        setFailedUploads(prev => [...prev, { file, error: errorMessage }])
+      }
     }
+
+    // All done
+    setCurrentUpload(null)
+    setUploadProgress(0)
+    setIsUploading(false)
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    
+    if (files.length === 0) return
+
+    // Validate all files are CSV
+    const invalidFiles = files.filter(
+      file => !file.name.endsWith('.csv') && file.type !== 'text/csv'
+    )
+
+    if (invalidFiles.length > 0) {
+      setError(`Invalid file type: ${invalidFiles.map(f => f.name).join(', ')}`)
+      return
+    }
+
+    setError(null)
+    processQueue(files)
+  }
+
+  const retryFailed = () => {
+    const filesToRetry = failedUploads.map(fu => fu.file)
+    setFailedUploads([])
+    processQueue(filesToRetry)
   }
 
   return {
-    selectedFile,
-    isUploading,
+    currentUpload,
     uploadProgress,
+    uploadQueue,
+    completedUploads,
+    failedUploads,
+    isUploading,
     error,
     handleFileChange,
+    retryFailed,
   }
 }
