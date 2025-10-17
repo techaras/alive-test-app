@@ -66,17 +66,29 @@ def callback(code: str):
 def logout(request: Request):
     """
     Log out the current user.
-    Clears session cookie and redirects to WorkOS logout URL.
+    Clears session cookie and redirects to appropriate page.
+    Handles invalid/expired sessions gracefully.
     """
-    session = workos.user_management.load_sealed_session(
-        sealed_session=request.cookies.get("wos_session"),
-        cookie_password=WORKOS_COOKIE_PASSWORD,
-    )
-    url = session.get_logout_url()
-
-    # After log out has succeeded, the user will be redirected to your
-    # app homepage which is configured in the WorkOS dashboard
-    response = RedirectResponse(url=url)
+    # Default redirect if we can't get WorkOS logout URL
+    redirect_url = "http://localhost:3000"
+    
+    try:
+        # Try to load the session and get proper logout URL
+        session = workos.user_management.load_sealed_session(
+            sealed_session=request.cookies.get("wos_session"),
+            cookie_password=WORKOS_COOKIE_PASSWORD,
+        )
+        redirect_url = session.get_logout_url()
+    except ValueError as e:
+        # Session is invalid/expired (e.g., INVALID_JWT)
+        # Just redirect to home page and clear cookie
+        print(f"Logout with invalid session: {e}")
+    except Exception as e:
+        # Any other error, still allow logout
+        print(f"Error during logout: {e}")
+    
+    # Always delete the cookie and redirect, regardless of session validity
+    response = RedirectResponse(url=redirect_url)
     response.delete_cookie("wos_session")
-
+    
     return response
