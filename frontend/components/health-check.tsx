@@ -12,8 +12,8 @@ export function HealthCheck() {
     const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
-        // Create SSE connection
-        const eventSource = new EventSource('http://localhost:8000/health/stream')
+        // Create SSE connection to Next.js API route (which proxies to FastAPI)
+        const eventSource = new EventSource('/api/health/stream')
 
         eventSource.onopen = () => {
             setError(null) // Clear error when connected
