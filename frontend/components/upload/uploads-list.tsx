@@ -3,6 +3,8 @@
 import { FileIcon, Loader2 } from 'lucide-react'
 import { Upload } from '@/hooks/use-uploads'
 import { formatTimestamp } from '@/lib/format-utils'
+import { GenerateUI } from '@/components/upload/generate-ui'
+import { DeleteUpload } from '@/components/upload/delete-upload'
 
 interface UploadsListProps {
   uploads: Upload[]
@@ -51,6 +53,11 @@ export function UploadsList({ uploads, isLoading, error }: UploadsListProps) {
                 <p className="text-xs text-muted-foreground mt-1">
                   {formatTimestamp(upload.uploaded_at)}
                 </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <GenerateUI />
+                <DeleteUpload />
               </div>
             </div>
           ))}
