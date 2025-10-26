@@ -1,6 +1,8 @@
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
+    let cancelled = false
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null
 
     const stream = new ReadableStream({
         async start(controller) {
@@ -18,30 +20,52 @@ export async function GET() {
                     return
                 }
 
-                const reader = response.body?.getReader()
-                if (!reader) {
+                const streamReader = response.body?.getReader()
+                if (!streamReader) {
                     controller.close()
                     return
                 }
+                
+                reader = streamReader
 
                 // Read and forward SSE data
-                while (true) {
+                while (!cancelled) {
                     const { done, value } = await reader.read()
                     
-                    if (done) {
-                        controller.close()
+                    if (done || cancelled) {
                         break
                     }
 
                     // Forward the SSE data to the client
-                    controller.enqueue(value)
+                    if (!cancelled) {
+                        try {
+                            controller.enqueue(value)
+                        } catch {
+                            // Controller was closed (client disconnected)
+                            break
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('SSE proxy error:', error)
-                controller.close()
+            } finally {
+                // Clean up
+                if (reader) {
+                    try {
+                        await reader.cancel()
+                    } catch {
+                        // Ignore cancellation errors
+                    }
+                }
+                try {
+                    controller.close()
+                } catch {
+                    // Already closed
+                }
             }
         },
         cancel() {
+            cancelled = true
             console.log('Client disconnected from SSE stream')
         },
     })
