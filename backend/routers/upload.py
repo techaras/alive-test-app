@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request, UploadFile, File, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import pandas as pd
 import json
 import uuid
@@ -82,6 +82,86 @@ async def get_uploads(request: Request):
             status_code=200,
             content={"uploads": uploads}
         )
+    finally:
+        conn.close()
+
+
+@router.delete("/upload/{upload_id}")
+async def delete_upload(upload_id: str, request: Request):
+    """
+    Delete an upload and its associated Parquet file.
+    
+    Args:
+        upload_id: The UUID of the upload to delete
+        request: FastAPI request object (for session)
+        
+    Returns:
+        204 No Content on success
+        404 if upload not found or doesn't belong to user
+        401 if not authenticated
+    """
+    # Check authentication with session refresh support
+    try:
+        session = workos.user_management.load_sealed_session(
+            sealed_session=request.cookies.get("wos_session"),
+            cookie_password=WORKOS_COOKIE_PASSWORD,
+        )
+        auth_response = session.authenticate()
+        
+        # If not authenticated, attempt to refresh the session
+        if not auth_response.authenticated:
+            if auth_response.reason == "no_session_cookie_provided":
+                raise HTTPException(status_code=401, detail="No session cookie")
+            
+            # Try to refresh the session
+            try:
+                refresh_result = session.refresh()
+                if not refresh_result.authenticated:
+                    raise HTTPException(status_code=401, detail="Session refresh failed")
+                
+                # Session refreshed successfully - use the new user
+                user_id = refresh_result.user.id
+            except Exception as refresh_error:
+                raise HTTPException(status_code=401, detail="Session expired")
+        else:
+            user_id = auth_response.user.id
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail="Authentication failed")
+    
+    # Get upload metadata from database
+    conn = get_db_connection()
+    try:
+        result = conn.execute("""
+            SELECT parquet_path, user_id
+            FROM uploads
+            WHERE upload_id = ?
+        """, [upload_id]).fetchone()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        
+        parquet_path, upload_user_id = result
+        
+        # Verify the upload belongs to the authenticated user
+        if upload_user_id != user_id:
+            raise HTTPException(status_code=404, detail="Upload not found")
+        
+        # Delete the Parquet file from filesystem
+        full_path = Path(__file__).parent.parent / parquet_path
+        if full_path.exists():
+            full_path.unlink()
+        
+        # Delete the record from database
+        conn.execute("""
+            DELETE FROM uploads
+            WHERE upload_id = ?
+        """, [upload_id])
+        
+        return Response(status_code=204)
+        
     finally:
         conn.close()
 

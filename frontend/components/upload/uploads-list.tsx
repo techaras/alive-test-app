@@ -10,9 +10,10 @@ interface UploadsListProps {
   uploads: Upload[]
   isLoading: boolean
   error: string | null
+  onDelete: () => void
 }
 
-export function UploadsList({ uploads, isLoading, error }: UploadsListProps) {
+export function UploadsList({ uploads, isLoading, error, onDelete }: UploadsListProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -57,7 +58,7 @@ export function UploadsList({ uploads, isLoading, error }: UploadsListProps) {
 
               <div className="flex items-center gap-2 flex-shrink-0">
                 <GenerateUI />
-                <DeleteUpload />
+                <DeleteUpload uploadId={upload.upload_id} onDelete={onDelete} />
               </div>
             </div>
           ))}

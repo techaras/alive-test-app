@@ -62,6 +62,7 @@ export function FileUpload() {
         uploads={uploads}
         isLoading={isLoading}
         error={fetchError}
+        onDelete={refetch}
       />
     </div>
   )
